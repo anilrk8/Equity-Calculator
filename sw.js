@@ -1,4 +1,4 @@
-const CACHE = 'gross-return-v1';
+const CACHE = 'gross-return-v3';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
