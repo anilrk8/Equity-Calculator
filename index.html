@@ -504,9 +504,19 @@
   </div>
 
   <div class="field">
-    <label>Desired Net Return (%)</label>
+    <label>Desired Net Return to Client (%)</label>
     <div class="input-wrap">
       <input type="number" id="net-return" value="12" step="0.1" inputmode="decimal" />
+      <span class="input-suffix">%</span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Your Profit Cut (%)
+      <span style="font-size:0.68rem;color:var(--muted);font-weight:400"> — taken from net profit</span>
+    </label>
+    <div class="input-wrap">
+      <input type="number" id="profit-cut" value="0" min="0" step="0.1" inputmode="decimal" />
       <span class="input-suffix">%</span>
     </div>
   </div>
@@ -552,6 +562,18 @@
     <div class="sell-label">Target Sell Price</div>
     <div class="sell-value" id="res-sell-price">₹—</div>
   </div>
+  <div id="res-cut-section" style="display:none">
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:0.78rem;color:var(--muted)" id="res-cut-label">Your Cut (0%)</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--yellow)" id="res-cut-amt">₹—</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:0.78rem;color:var(--muted)" id="res-client-label">Client Net (0%)</div>
+        <div style="font-size:1rem;font-weight:700;color:var(--green)" id="res-client-amt">₹—</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Toggle breakdown -->
@@ -584,6 +606,8 @@
 
   <div class="breakdown-row" style="background:rgba(0,212,170,0.04)"><span class="name" style="color:var(--green)">Net Profit (after all charges &amp; tax)</span><span class="val pos" id="bd-net-profit">—</span></div>
   <div class="breakdown-row" style="background:rgba(0,212,170,0.04)"><span class="name" style="color:var(--green)">Net Return %</span><span class="val pos" id="bd-net-pct">—</span></div>
+  <div class="breakdown-row" id="bd-cut-row" style="display:none;background:rgba(245,166,35,0.07)"><span class="name" style="color:var(--yellow)" id="bd-cut-label">Your Profit Cut (0%)</span><span class="val" style="color:var(--yellow)" id="bd-cut-amt">—</span></div>
+  <div class="breakdown-row" id="bd-client-row" style="display:none;background:rgba(0,212,170,0.06)"><span class="name" style="color:var(--green);font-weight:700" id="bd-client-label">Client Net Profit (0%)</span><span class="val pos" style="font-size:0.95rem" id="bd-client-amt">—</span></div>
 </div>
 
 <!-- Tip -->
@@ -670,9 +694,11 @@
   //             / (1 − sellPctRate − cgRate)
 
   function calculate() {
-    const buyPrice  = parseFloat($('buy-price').value) || 0;
-    const qty       = parseInt($('qty').value)          || 0;
-    const netRetPct = parseFloat($('net-return').value) || 0;
+    const buyPrice    = parseFloat($('buy-price').value)  || 0;
+    const qty         = parseInt($('qty').value)           || 0;
+    const clientNetPct= parseFloat($('net-return').value)  || 0;
+    const profitCutPct= parseFloat($('profit-cut').value)  || 0;
+    const netRetPct   = clientNetPct + profitCutPct;   // total net the stock must generate
     if (buyPrice <= 0 || qty <= 0) return;
 
     const cfg      = getCfg();
@@ -700,10 +726,24 @@
     const actualNetPct = (netProfit / totalBuyCost) * 100;
     const grossPct    = ((sellValue - buyValue) / buyValue) * 100;
 
+    // profit cut split
+    const profitCutAmt  = totalBuyCost * profitCutPct / 100;
+    const clientNetAmt  = netProfit - profitCutAmt;
+
     // ── Result card ────────────────────────────────────────
     $('res-gross-pct').textContent  = fmt4(grossPct);
     $('res-sell-price').textContent = '₹' + fmt(sellPerShare);
-    $('res-subtext').textContent    = `To net ${fmt(actualNetPct)}% on ₹${fmt(totalBuyCost)} invested`;
+    $('res-subtext').textContent    = `Gross covers all charges${profitCutPct > 0 ? ' + your cut' : ''} + client’s ${fmt(clientNetPct)}%`;
+
+    if (profitCutPct > 0) {
+      $('res-cut-section').style.display = 'block';
+      $('res-cut-label').textContent    = `Your Cut (${fmt(profitCutPct)}%)`;
+      $('res-cut-amt').textContent      = '₹' + fmt(profitCutAmt);
+      $('res-client-label').textContent = `Client Net (${fmt(clientNetPct)}%)`;
+      $('res-client-amt').textContent   = '₹' + fmt(clientNetAmt);
+    } else {
+      $('res-cut-section').style.display = 'none';
+    }
 
     // ── CG tax row ─────────────────────────────────────────
     const cgRowEl = $('bd-cgtax-row');
@@ -759,10 +799,23 @@
     $('bd-total-charges').textContent = fmt(totalCharges);
     $('bd-net-profit').textContent    = fmt(netProfit);
     $('bd-net-pct').textContent       = fmt(actualNetPct) + '%';
+
+    // profit cut rows in breakdown
+    if (profitCutPct > 0) {
+      $('bd-cut-row').style.display    = 'flex';
+      $('bd-client-row').style.display = 'flex';
+      $('bd-cut-label').textContent    = `Your Profit Cut (${fmt(profitCutPct)}%)`;
+      $('bd-cut-amt').textContent      = '₹' + fmt(profitCutAmt);
+      $('bd-client-label').textContent = `Client Net Profit (${fmt(clientNetPct)}%)`;
+      $('bd-client-amt').textContent   = '₹' + fmt(clientNetAmt);
+    } else {
+      $('bd-cut-row').style.display    = 'none';
+      $('bd-client-row').style.display = 'none';
+    }
   }
 
   // ── Event listeners ────────────────────────────────────────
-  ['buy-price','qty','net-return'].forEach(id => {
+  ['buy-price','qty','net-return','profit-cut'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('input', calculate);
   });
